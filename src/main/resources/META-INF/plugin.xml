@@ -51,9 +51,10 @@
             id="com.paulmanoni.nexus.settings"
             displayName="Nexus"/>
 
-        <!-- ExternalAnnotator runs `nexus lint --yaml --json` on the
-             open buffer when its language is YAML. Per-file scope
-             so other YAML files in the project don't trigger it. -->
+        <!-- ExternalAnnotator runs the lint CLI on the open buffer
+             when its language is YAML and the file is a deploy
+             manifest. Per-file scope so other YAML files in the
+             project don't trigger it. -->
         <externalAnnotator
             language="yaml"
             implementationClass="com.paulmanoni.nexus.lint.NexusLintExternalAnnotator"/>

@@ -6,7 +6,7 @@ kotlin = "1.9.25"
 # IntelliJ Platform Gradle Plugin 2.x — released 2024, replaces
 # `org.jetbrains.intellij`. The 2.x line targets IntelliJ
 # 2024.3+ first-class.
-intellijPlatform = "2.1.0"
+intellijPlatform = "2.16.0"
 
 [plugins]
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

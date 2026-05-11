@@ -71,11 +71,11 @@ intellijPlatform {
         token = providers.environmentVariable("PUBLISH_TOKEN")
     }
 
-    pluginVerification {
-        ides {
-            recommended()
-        }
-    }
+    // pluginVerification {} block intentionally omitted from v0.1.0 —
+    // ides.recommended() fetches the recommended-IDE list over the
+    // network and can fail offline / in air-gapped builds. Add it
+    // back when wiring up `verifyPlugin` in CI, where the network
+    // path is guaranteed.
 }
 
 tasks {
