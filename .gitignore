@@ -1,0 +1,15 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ Platform plugin development
+.intellijPlatform/
+
+# Generated source / IDE artifacts
+out/
+*.iml
+.idea/
+
+# OS
+.DS_Store

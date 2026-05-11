@@ -1,0 +1,13 @@
+# Single source of truth for plugin + library versions. Gradle's
+# version catalog format; aliased into build.gradle.kts.
+
+[versions]
+kotlin = "1.9.25"
+# IntelliJ Platform Gradle Plugin 2.x — released 2024, replaces
+# `org.jetbrains.intellij`. The 2.x line targets IntelliJ
+# 2024.3+ first-class.
+intellijPlatform = "2.1.0"
+
+[plugins]
+kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+intellijPlatform = { id = "org.jetbrains.intellij.platform", version.ref = "intellijPlatform" }

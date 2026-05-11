@@ -1,0 +1,76 @@
+<!--
+  Plugin descriptor. The IntelliJ Platform reads this at install time
+  to wire up extensions, services, actions, and tool windows. Keep
+  the `id` stable across releases — that's the key JetBrains
+  Marketplace uses to track updates.
+
+  Compatibility: requires com.intellij.modules.platform (every IDE)
+  + the YAML bundled plugin (PyCharm / GoLand / IDEA Ultimate all
+  ship it; IDEA Community + Rider do too as of 2024.x).
+-->
+<idea-plugin>
+    <id>com.paulmanoni.nexus</id>
+    <name>Nexus Framework</name>
+    <vendor email="paul@example.com" url="https://github.com/paulmanoni/nexus">Paul Manoni</vendor>
+
+    <description><![CDATA[
+        <p>IDE support for the <a href="https://github.com/paulmanoni/nexus">nexus</a> Go framework:</p>
+        <ul>
+            <li><b>YAML linting</b> for <code>nexus.deploy.yaml</code> — every issue
+                <code>nexus lint --yaml</code> would surface is shown inline in the editor.</li>
+            <li><b>Run configurations</b> for <code>nexus dev</code> and <code>nexus lint</code>
+                so the framework's dev loop is a one-click action.</li>
+            <li><b>Tool window</b> showing the running app's registered plugins +
+                endpoints, fetched from <code>/__nexus/plugins</code> +
+                <code>/__nexus/endpoints</code>.</li>
+        </ul>
+        <p>Requires the <code>nexus</code> CLI binary on PATH (or configured via
+        Settings → Tools → Nexus). Built against the framework's v0.43.x line.</p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <p><b>0.1.0</b> — initial release. YAML linting via the
+        <code>nexus lint --yaml --json</code> CLI, two run configurations,
+        and a tool window for the running app's plugins/endpoints.</p>
+    ]]></change-notes>
+
+    <!-- Hard dependency: platform module is present in every IDE. -->
+    <depends>com.intellij.modules.platform</depends>
+    <!-- YAML is bundled in every JetBrains IDE since 2018. -->
+    <depends>org.jetbrains.plugins.yaml</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Persistent settings (CLI path, dashboard URL). -->
+        <applicationService
+            serviceImplementation="com.paulmanoni.nexus.settings.NexusSettings"/>
+
+        <!-- Settings UI panel under Settings → Tools → Nexus. -->
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.paulmanoni.nexus.settings.NexusConfigurable"
+            id="com.paulmanoni.nexus.settings"
+            displayName="Nexus"/>
+
+        <!-- ExternalAnnotator runs `nexus lint --yaml --json` on the
+             open buffer when its language is YAML. Per-file scope
+             so other YAML files in the project don't trigger it. -->
+        <externalAnnotator
+            language="yaml"
+            implementationClass="com.paulmanoni.nexus.lint.NexusLintExternalAnnotator"/>
+
+        <!-- Tool window — appears as a tab on the right side. -->
+        <toolWindow
+            id="Nexus"
+            anchor="right"
+            secondary="false"
+            icon="AllIcons.Toolwindows.ToolWindowProject"
+            factoryClass="com.paulmanoni.nexus.toolwindow.NexusToolWindowFactory"/>
+
+        <!-- Run configuration types. The CLI commands themselves
+             come from the user's PATH. -->
+        <configurationType
+            implementation="com.paulmanoni.nexus.run.NexusDevConfigurationType"/>
+        <configurationType
+            implementation="com.paulmanoni.nexus.run.NexusLintConfigurationType"/>
+    </extensions>
+</idea-plugin>
