@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paulmanoni/nexus/schemas/nexus-deploy.schema.json",
+  "title": "nexus.deploy.yaml",
+  "description": "Deployment manifest for the nexus Go framework. Declares the contract between a binary and its orchestration platform: deployments, peers, environments, inputs, and per-environment overrides.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "deployments": {
+      "type": "object",
+      "description": "Topology declaration: every deployment unit, what modules it owns, its listening port, and per-unit listener overrides. `nexus build --deployment X` reads this to generate zz_deploy_gen.go for X.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "owns": {
+            "type": "array",
+            "description": "Modules this deployment compiles locally. Modules not listed are HTTP-stub shadows. Omit entirely (or use null) for monolith (owns everything).",
+            "items": { "type": "string" }
+          },
+          "port": {
+            "type": "integer",
+            "description": "TCP port this deployment listens on. Baked into Config.Addr at build time.",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Route prefix prepended to every user-mounted route (REST + GraphQL + WS). Framework routes (/__nexus, /health) stay unprefixed.",
+            "examples": ["/api", "/v1/api"]
+          },
+          "listeners": {
+            "type": "object",
+            "description": "Additional bound listeners beyond the public port. Each entry needs `scope:` (public / admin / internal); addr auto-derives (admin = port+1000, internal = port+2000).",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "enum": ["public", "admin", "internal"],
+                  "description": "Visibility scope. public = external traffic, admin = dashboard + introspection, internal = peer-to-peer + health probes."
+                },
+                "addr": {
+                  "type": "string",
+                  "description": "Bind address. Optional — auto-derived from port + offset when omitted.",
+                  "examples": [":9080", "127.0.0.1:0"]
+                }
+              },
+              "required": ["scope"]
+            }
+          }
+        }
+      }
+    },
+
+    "peers": {
+      "type": "object",
+      "description": "Per-peer transport settings consulted by codegen'd remote-service clients. Keyed by DeployAs tag.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Single-replica peer URL. Mutually exclusive with `urls`.",
+            "examples": ["http://users-svc:8081", "${USERS_SVC_URL}"]
+          },
+          "urls": {
+            "type": "array",
+            "description": "Multi-replica URLs (round-robin + eject). Mutually exclusive with `url`.",
+            "items": { "type": "string" }
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Request timeout. Go-duration format.",
+            "examples": ["2s", "500ms", "30s"],
+            "pattern": "^[0-9]+(ms|s|m|h)$"
+          },
+          "retries": {
+            "type": "integer",
+            "description": "Retry count for transient failures (5xx + network errors). 0 disables.",
+            "minimum": 0
+          },
+          "min_version": {
+            "type": "string",
+            "description": "Minimum peer version this client tolerates. Reads from peer's /__nexus/config.",
+            "examples": ["v0.40.0"]
+          },
+          "auth": {
+            "type": "object",
+            "description": "Per-peer authentication.",
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["bearer", "basic", "none"],
+                "description": "Authentication scheme."
+              },
+              "token": {
+                "type": "string",
+                "description": "Bearer token. Use ${VAR} for env interpolation; never commit literal secrets.",
+                "examples": ["${USERS_SVC_TOKEN}"]
+              },
+              "username": { "type": "string" },
+              "password": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "environments": {
+      "type": "object",
+      "description": "Declared deploy targets (production, staging, preview, ...). The platform consults this to know which environments the binary supports; Config.Environment / NEXUS_ENVIRONMENT selects one at boot.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Routing target — the platform attaches inbound traffic for this environment to this hostname.",
+            "examples": ["app.example.com", "staging.example.com"]
+          },
+          "autoscale": {
+            "type": "object",
+            "description": "Replica count bounds. Platform decides the metric + policy.",
+            "additionalProperties": false,
+            "properties": {
+              "min": {
+                "type": "integer",
+                "description": "Minimum replicas (always running).",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "description": "Maximum replicas (scale ceiling).",
+                "minimum": 1
+              }
+            }
+          },
+          "ttl": {
+            "type": "string",
+            "description": "Ephemeral environment lifetime. Non-empty marks the env as auto-destroyed (typical for per-PR preview deploys).",
+            "examples": ["7d", "24h"]
+          }
+        }
+      }
+    },
+
+    "secrets": {
+      "type": "object",
+      "description": "Sensitive inputs the operator supplies via the platform's encrypted secret store. Distinct from `env` so the platform UI can render with redaction + rotation hints.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Human-readable explanation for the platform UI."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "When true, boot refuses to start if the secret is unset. Default false."
+          },
+          "env_scoped": {
+            "type": "boolean",
+            "description": "True = different value per environment (typical for API keys). False = one value shared across all envs."
+          },
+          "rotate_alert": {
+            "type": "string",
+            "description": "Platform reminder cadence — emit a warning once the secret has not been written for this long.",
+            "examples": ["90d", "6months"]
+          },
+          "validation": { "$ref": "#/$defs/validation" }
+        }
+      }
+    },
+
+    "files": {
+      "type": "object",
+      "description": "Mounted blobs the platform writes to known paths (TLS bundles, JSON config overrides, etc.).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Mount path inside the container. Must be absolute.",
+            "examples": ["/etc/ssl/app/bundle.pem", "/etc/app/overrides.json"]
+          },
+          "description": { "type": "string" },
+          "mode": {
+            "type": "integer",
+            "description": "Octal file mode. 0 = platform default (typically 0644).",
+            "examples": [256, 420, 384]
+          },
+          "secret": {
+            "type": "boolean",
+            "description": "True = encrypted at rest, redacted in any UI rendering of the file's contents."
+          },
+          "env_scoped": {
+            "type": "boolean",
+            "description": "True = each environment gets its own file content."
+          },
+          "schema": {
+            "description": "JSON Schema (Draft 2020-12) the file's contents must satisfy. Platform validates pre-deploy and rejects override violations.",
+            "type": "object"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+
+    "hooks": {
+      "type": "object",
+      "description": "Platform-orchestrated commands run outside the binary at well-defined deploy phases. Distinct from in-binary StartupTasks (which run inside the process at fx.Start).",
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "type": "array",
+          "description": "Runs on the platform's build node before the image is finalized. Typical: `go build`, `npm run build`.",
+          "items": { "type": "string" }
+        },
+        "predeploy": {
+          "type": "array",
+          "description": "Runs after the image is built and before traffic shifts. Typical: schema migrations, cache warmups.",
+          "items": { "type": "string" }
+        },
+        "postdeploy": {
+          "type": "array",
+          "description": "Runs after the new release is live. Typical: CDN purges, Slack notifications, smoke tests.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "environment_overrides": {
+      "type": "object",
+      "description": "Per-environment diffs applied to the base inputs at merge time. Keys must match a declared environment. Cannot introduce inputs not in the base — only adjust existing ones.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "env": {
+            "type": "object",
+            "description": "Scalar locks: replace the effective default and mark the field read-only for operators in this environment.",
+            "additionalProperties": { "type": "string" }
+          },
+          "env_specs": {
+            "type": "object",
+            "description": "Spec diffs: field-by-field merge into the base env declaration (default, required, validation, etc.).",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "description": { "type": "string" },
+                "required": { "type": "boolean" },
+                "default": { "type": "string" },
+                "env_scoped": { "type": "boolean" },
+                "validation": { "$ref": "#/$defs/validation" }
+              }
+            }
+          },
+          "secret_specs": {
+            "type": "object",
+            "description": "Spec diffs for secrets. Same merge rules as env_specs.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "description": { "type": "string" },
+                "required": { "type": "boolean" },
+                "env_scoped": { "type": "boolean" },
+                "rotate_alert": { "type": "string" },
+                "validation": { "$ref": "#/$defs/validation" }
+              }
+            }
+          },
+          "file_specs": {
+            "type": "object",
+            "description": "Spec diffs for files.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "description": { "type": "string" },
+                "mode": { "type": "integer" },
+                "secret": { "type": "boolean" },
+                "env_scoped": { "type": "boolean" }
+              }
+            }
+          },
+          "services": {
+            "type": "object",
+            "description": "Service patches. Deep-merge into the base service declaration (size, backup, expose_as additions).",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": { "type": "string" },
+                "size": { "type": "string" },
+                "backup": { "type": "string", "enum": ["none", "daily", "hourly", "continuous"] },
+                "expose_as": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "ephemeral": { "type": "boolean" },
+                "optional": { "type": "boolean" }
+              }
+            }
+          },
+          "removed": {
+            "type": "array",
+            "description": "Dotted paths to drop from this environment's effective manifest. Bucket must be env|secrets|files|services|volumes.",
+            "items": {
+              "type": "string",
+              "pattern": "^(env|secrets|files|services|volumes)\\.[A-Za-z_][A-Za-z0-9_./-]*$",
+              "examples": ["secrets.STRIPE_API_KEY", "services.main_db"]
+            }
+          },
+          "hooks": { "$ref": "#/properties/hooks" }
+        }
+      }
+    },
+
+    "services": {
+      "type": "object",
+      "description": "Backing services to provision (DB, cache, queue). The platform fulfills each by binding a managed sidecar and injecting connection env vars via expose_as.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Service type the platform recognizes.",
+            "examples": ["postgres", "redis", "mysql", "rabbitmq", "s3"]
+          },
+          "version": { "type": "string", "examples": ["16", "7", ">=14"] },
+          "optional": { "type": "boolean" },
+          "size": { "type": "string", "examples": ["small", "medium", "large"] },
+          "backup": { "type": "string", "enum": ["none", "daily", "hourly", "continuous"] },
+          "ephemeral": { "type": "boolean" },
+          "expose_as": {
+            "type": "object",
+            "description": "Map logical service fields to env-var names the app reads. Well-known keys: url, host, port, user, password, database, vhost, exchange.",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "required": ["kind"]
+      }
+    },
+
+    "env": {
+      "type": "object",
+      "description": "Env vars the app reads, with required/secret flags + bound_to pointers. Auto-populated by `nexus reconcile` from binary print mode; can also be edited by hand.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": { "type": "string" },
+          "required": { "type": "boolean" },
+          "secret": { "type": "boolean" },
+          "default": { "type": "string" },
+          "bound_to": {
+            "type": "string",
+            "description": "Dotted reference into a service's expose_as field. Format: <service>.<field>",
+            "examples": ["main_db.url", "cache.host"]
+          },
+          "env_scoped": { "type": "boolean" },
+          "validation": { "$ref": "#/$defs/validation" }
+        }
+      }
+    },
+
+    "startup_tasks": {
+      "type": "array",
+      "description": "Pre-start tasks the binary runs before binding listeners. Auto-populated by `nexus reconcile`.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "phase": { "type": "string", "enum": ["pre-start"] }
+        },
+        "required": ["name"]
+      }
+    },
+
+    "overrides": {
+      "type": "object",
+      "description": "Reconcile-survival operator patches (legacy). Per-field overrides for the auto-generated services/env sections.",
+      "additionalProperties": false,
+      "properties": {
+        "services": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "type": "string" },
+              "version": { "type": "string" },
+              "optional": { "type": "boolean" },
+              "expose_as": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "description": { "type": "string" },
+              "required": { "type": "boolean" },
+              "secret": { "type": "boolean" },
+              "default": { "type": "string" },
+              "bound_to": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "validation": {
+      "type": "object",
+      "description": "Constraints applied to the effective value at boot or pre-render.",
+      "additionalProperties": false,
+      "properties": {
+        "enum": {
+          "type": "array",
+          "description": "Allowed values. Effective value must match one exactly.",
+          "items": { "type": "string" }
+        },
+        "regex": {
+          "type": "string",
+          "description": "Regular expression the value must match. Re2 syntax (Go-compatible)."
+        },
+        "min": {
+          "type": "integer",
+          "description": "Minimum numeric value (when the field parses as a number)."
+        },
+        "max": {
+          "type": "integer",
+          "description": "Maximum numeric value."
+        },
+        "length": {
+          "type": "object",
+          "description": "String-length bounds.",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

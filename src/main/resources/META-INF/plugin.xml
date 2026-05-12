@@ -38,6 +38,12 @@
     <depends>com.intellij.modules.platform</depends>
     <!-- YAML is bundled in every JetBrains IDE since 2018. -->
     <depends>org.jetbrains.plugins.yaml</depends>
+    <!-- JSON Schema integration drives autocomplete + validation
+         + hover docs on nexus.deploy.yaml. Bundled in every
+         JetBrains IDE — declaring it explicitly so a missing
+         dependency surfaces at install time instead of at first
+         schema lookup. -->
+    <depends>com.intellij.modules.json</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Persistent settings (CLI path, dashboard URL). -->
@@ -73,5 +79,13 @@
             implementation="com.paulmanoni.nexus.run.NexusDevConfigurationType"/>
         <configurationType
             implementation="com.paulmanoni.nexus.run.NexusLintConfigurationType"/>
+    </extensions>
+
+    <!-- JSON Schema mapping for nexus.deploy.yaml — drives
+         autocomplete + hover docs + inline validation. The schema
+         file is bundled at resources/schemas/nexus-deploy.schema.json. -->
+    <extensions defaultExtensionNs="JavaScript.JsonSchema">
+        <ProviderFactory
+            implementation="com.paulmanoni.nexus.schema.NexusYamlSchemaProviderFactory"/>
     </extensions>
 </idea-plugin>
