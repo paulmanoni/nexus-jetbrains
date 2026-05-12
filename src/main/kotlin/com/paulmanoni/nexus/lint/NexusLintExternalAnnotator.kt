@@ -63,18 +63,37 @@ class NexusLintExternalAnnotator :
     /**
      * Mirrors the `--json` payload `nexus lint` emits. Field names
      * match the CLI's struct tags exactly so Gson maps cleanly.
+     *
+     * All collection / string fields are declared NULLABLE despite
+     * being non-nullable in the framework's JSON contract. Reason:
+     * Gson sets fields via reflection and bypasses Kotlin's default
+     * values, so `"issues":null` (Go's encoding of a nil slice)
+     * lands as null here instead of `emptyList()`. We coalesce at
+     * the use site via copyWithDefaults().
      */
     data class LintDocument(
-        val issues: List<Issue> = emptyList(),
-        val summary: Summary = Summary(),
+        val issues: List<Issue?>? = null,
+        val summary: Summary? = null,
     )
 
     data class Issue(
-        val severity: String = "error",
-        val code: String = "",
-        val path: String = "",
-        val message: String = "",
-    )
+        val severity: String? = null,
+        val code: String? = null,
+        val path: String? = null,
+        val message: String? = null,
+    ) {
+        /**
+         * Promotes nullable fields to safe defaults. Called once
+         * per issue right after Gson deserialization so downstream
+         * Result / apply() can rely on non-null values.
+         */
+        fun copyWithDefaults(): Issue = Issue(
+            severity = severity ?: "error",
+            code = code ?: "",
+            path = path ?: "",
+            message = message ?: "",
+        )
+    }
 
     data class Summary(
         val errors: Int = 0,
@@ -137,8 +156,18 @@ class NexusLintExternalAnnotator :
                 return Result(cliError = msg)
             }
 
+            // Gson + Kotlin gotcha: reflective field set bypasses
+            // data-class default values. Go's json.Encoder emits
+            // `"issues":null` (not `[]`) for a nil slice, so a
+            // clean-lint response from the CLI leaves doc.issues
+            // null even though we declared it `= emptyList()`. Treat
+            // null as empty everywhere it could land.
             val doc = Gson().fromJson(stdout, LintDocument::class.java)
-            return Result(issues = doc.issues)
+                ?: LintDocument()
+            val safeIssues = (doc.issues ?: emptyList())
+                .filterNotNull()
+                .map { it.copyWithDefaults() }
+            return Result(issues = safeIssues)
         } catch (e: IOException) {
             return Result(cliError = "could not exec '$cliPath': ${e.message ?: e.javaClass.simpleName}")
         } catch (e: InterruptedException) {
@@ -174,21 +203,23 @@ class NexusLintExternalAnnotator :
         } ?: return
 
         for (issue in annotationResult.issues) {
-            val range = locateRange(document, file.text, issue.path)
+            // copyWithDefaults() already promoted nulls; the `?: ""`
+            // here is a belt-and-suspenders second layer in case
+            // future changes loosen that promotion. Kotlin's flow
+            // analysis can't see across the data class boundary so
+            // the explicit fallback is still needed.
+            val path = issue.path ?: ""
+            val message = issue.message ?: ""
+            val code = issue.code ?: ""
+            val range = locateRange(document, file.text, path)
             val severity = when (issue.severity) {
                 "error" -> HighlightSeverity.ERROR
                 "warning" -> HighlightSeverity.WARNING
                 else -> HighlightSeverity.WEAK_WARNING
             }
-            val tooltip = buildString {
-                append("nexus lint [")
-                append(issue.code)
-                append("]: ")
-                append(issue.message)
-            }
-            holder.newAnnotation(severity, "${issue.path}: ${issue.message}")
+            holder.newAnnotation(severity, "$path: $message")
                 .range(range)
-                .tooltip(tooltip)
+                .tooltip("nexus lint [$code]: $message")
                 .needsUpdateOnTyping(true)
                 .create()
         }
