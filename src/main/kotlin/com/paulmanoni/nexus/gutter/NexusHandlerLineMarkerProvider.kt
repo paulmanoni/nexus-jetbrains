@@ -1,11 +1,15 @@
 package com.paulmanoni.nexus.gutter
 
+import com.intellij.codeInsight.daemon.GutterIconNavigationHandler
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.icons.AllIcons
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.psi.PsiElement
 import com.intellij.psi.impl.source.tree.LeafPsiElement
+import com.paulmanoni.nexus.settings.NexusSettings
+import java.awt.event.MouseEvent
 import javax.swing.Icon
 
 /**
@@ -57,10 +61,44 @@ class NexusHandlerLineMarkerProvider : LineMarkerProviderDescriptor() {
             element,
             element.textRange,
             kind.icon,
-            { _: PsiElement -> kind.tooltip },
-            null, // no click navigation in v1; future: open dashboard endpoint
+            // Tooltip includes click hint so operators discover the
+            // navigation behavior without reading docs.
+            { _: PsiElement -> "${kind.tooltip} · click to open in dashboard" },
+            OpenInDashboardHandler(kind),
             GutterIconRenderer.Alignment.LEFT,
         ) { kind.tooltip }
+    }
+
+    /**
+     * Click handler that opens the running app's dashboard in the
+     * user's default browser, pointed at the most relevant tab for
+     * the kind of handler clicked. Workers land on the architecture
+     * canvas (they have no /endpoints row of their own); everything
+     * else lands on the endpoints tab where the operator can scroll
+     * or Cmd-K to find the specific handler.
+     *
+     * The base URL comes from plugin settings (Settings → Tools →
+     * Nexus → Dashboard base URL); defaults to localhost:8080 to
+     * match the framework's default dev port.
+     *
+     * We don't resolve the handler's specific path / operation
+     * here — that would require parsing the call's argument list,
+     * which depends on Go PSI types and varies (AsRest takes
+     * method+path, AsQuery infers from constructor name, AsCRUD
+     * synthesizes routes from a type parameter). Coarse-grained
+     * "open the right tab" is 80% of the value at 10% of the code;
+     * a future enhancement can deep-link once the call-args
+     * extraction is built.
+     */
+    private class OpenInDashboardHandler(
+        private val kind: HandlerKind,
+    ) : GutterIconNavigationHandler<PsiElement> {
+        override fun navigate(e: MouseEvent?, element: PsiElement?) {
+            val base = NexusSettings.getInstance().dashboardBaseUrl
+                .ifBlank { "http://localhost:8080" }
+                .trimEnd('/')
+            BrowserUtil.browse("$base/__nexus/?tab=${kind.dashboardTab}")
+        }
     }
 
     /**
@@ -108,15 +146,20 @@ class NexusHandlerLineMarkerProvider : LineMarkerProviderDescriptor() {
         val identifier: String,
         val tooltip: String,
         val icon: Icon,
+        // dashboardTab is the ?tab= query value the dashboard's Vue
+        // SPA reads to select a panel. Workers don't have their own
+        // /endpoints row so they land on "architecture" (the
+        // service-graph view where worker nodes are visible).
+        val dashboardTab: String,
     ) {
-        Rest("AsRest", "Nexus REST handler", AllIcons.Json.Object),
-        RestHandler("AsRestHandler", "Nexus REST handler (raw gin)", AllIcons.Json.Object),
-        Query("AsQuery", "Nexus GraphQL query", AllIcons.Toolwindows.WebToolWindow),
-        Mutation("AsMutation", "Nexus GraphQL mutation", AllIcons.Toolwindows.WebToolWindow),
-        Subscription("AsSubscription", "Nexus GraphQL subscription", AllIcons.Toolwindows.WebToolWindow),
-        WS("AsWS", "Nexus WebSocket handler", AllIcons.Webreferences.Server),
-        CRUD("AsCRUD", "Nexus CRUD handler set", AllIcons.Nodes.DataTables),
-        Worker("AsWorker", "Nexus worker (long-running)", AllIcons.RunConfigurations.TestState.Run);
+        Rest("AsRest", "Nexus REST handler", AllIcons.Json.Object, "endpoints"),
+        RestHandler("AsRestHandler", "Nexus REST handler (raw gin)", AllIcons.Json.Object, "endpoints"),
+        Query("AsQuery", "Nexus GraphQL query", AllIcons.Toolwindows.WebToolWindow, "endpoints"),
+        Mutation("AsMutation", "Nexus GraphQL mutation", AllIcons.Toolwindows.WebToolWindow, "endpoints"),
+        Subscription("AsSubscription", "Nexus GraphQL subscription", AllIcons.Toolwindows.WebToolWindow, "endpoints"),
+        WS("AsWS", "Nexus WebSocket handler", AllIcons.Webreferences.Server, "endpoints"),
+        CRUD("AsCRUD", "Nexus CRUD handler set", AllIcons.Nodes.DataTables, "endpoints"),
+        Worker("AsWorker", "Nexus worker (long-running)", AllIcons.RunConfigurations.TestState.Run, "architecture");
 
         companion object {
             // Lookup table keyed by identifier text — O(1) match on
