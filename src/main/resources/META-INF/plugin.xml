@@ -45,6 +45,15 @@
          schema lookup. -->
     <depends>com.intellij.modules.json</depends>
 
+    <!-- Optional dependency on the Go plugin. Loaded only in IDEs
+         that ship it (GoLand, IDEA Ultimate, or IDEA CE with Go
+         manually installed). The nexus-go.xml config registers
+         features that only make sense for Go source — currently
+         the handler gutter icons. Other features (YAML lint /
+         schema, run configurations, tool window, settings) work
+         without the Go plugin. -->
+    <depends optional="true" config-file="nexus-go.xml">org.jetbrains.plugins.go</depends>
+
     <extensions defaultExtensionNs="com.intellij">
         <!-- Persistent settings (CLI path, dashboard URL). -->
         <applicationService
@@ -64,6 +73,11 @@
         <externalAnnotator
             language="yaml"
             implementationClass="com.paulmanoni.nexus.lint.NexusLintExternalAnnotator"/>
+
+        <!-- Gutter icons for nexus handler calls are registered in
+             nexus-go.xml (optional, loaded only when the Go plugin
+             is present — see the <depends optional> entry below). -->
+
 
         <!-- Tool window — appears as a tab on the right side. -->
         <toolWindow

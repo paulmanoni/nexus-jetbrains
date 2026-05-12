@@ -1,0 +1,17 @@
+<!--
+  Optional plugin descriptor loaded when org.jetbrains.plugins.go
+  is present (GoLand, IDEA Ultimate, or IDEA CE with Go installed).
+  Registers Go-language-specific extensions: gutter icons next to
+  nexus handler calls today; future additions (intentions, find-usages
+  extensions) land here.
+
+  Anything in this file is silently skipped when the Go plugin is
+  absent — see the <depends optional> entry in the main plugin.xml.
+-->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <codeInsight.lineMarkerProvider
+            language="go"
+            implementationClass="com.paulmanoni.nexus.gutter.NexusHandlerLineMarkerProvider"/>
+    </extensions>
+</idea-plugin>
