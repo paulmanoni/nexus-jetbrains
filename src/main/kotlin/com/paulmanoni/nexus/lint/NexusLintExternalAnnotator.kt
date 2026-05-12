@@ -11,7 +11,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
-import com.paulmanoni.nexus.settings.NexusSettings
+import com.paulmanoni.nexus.cli.resolveCliPath
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -85,8 +85,7 @@ class NexusLintExternalAnnotator :
         val vfile: VirtualFile = file.virtualFile ?: return null
         if (!isNexusDeployYaml(vfile)) return null
 
-        val settings = NexusSettings.getInstance()
-        val cliPath = settings.cliPath.ifBlank { "nexus" }
+        val cliPath = resolveCliPath()
 
         // Write the in-memory buffer to a temp file so the CLI sees
         // unsaved edits. Keeping a temp file (rather than piping

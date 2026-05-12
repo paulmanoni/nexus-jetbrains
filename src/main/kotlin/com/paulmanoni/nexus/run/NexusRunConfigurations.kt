@@ -6,7 +6,7 @@ import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
-import com.paulmanoni.nexus.settings.NexusSettings
+import com.paulmanoni.nexus.cli.resolveCliPath
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -85,7 +85,7 @@ class NexusCliRunConfiguration(
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState =
         object : CommandLineState(environment) {
             override fun startProcess(): com.intellij.execution.process.ProcessHandler {
-                val cli = NexusSettings.getInstance().cliPath.ifBlank { "nexus" }
+                val cli = resolveCliPath()
                 val cmd = GeneralCommandLine(listOf(cli) + args)
                     .withWorkDirectory(project.basePath)
                     .withCharset(Charsets.UTF_8)
