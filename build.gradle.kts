@@ -60,7 +60,24 @@ intellijPlatform {
         version = providers.gradleProperty("pluginVersion")
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
+            // untilBuild: empty string in gradle.properties means "no
+            // upper bound declared" — we want the descriptor to omit
+            // the attribute entirely in that case. The IntelliJ
+            // Platform Gradle Plugin 2.x emits an empty attribute
+            // unless we explicitly clear the provider with .unset(),
+            // which fails validation at install time:
+            //
+            //   Invalid plugin descriptor 'plugin.xml'. The
+            //   <until-build> attribute () does not match...
+            //
+            // Map empty → unset; any non-empty value passes through.
             untilBuild = providers.gradleProperty("pluginUntilBuild")
+                .map { if (it.isBlank()) "" else it }
+                .orElse("")
+            // Explicitly unset when blank so the plugin omits the attr.
+            if (providers.gradleProperty("pluginUntilBuild").orNull.isNullOrBlank()) {
+                untilBuild.unset()
+            }
         }
     }
 
