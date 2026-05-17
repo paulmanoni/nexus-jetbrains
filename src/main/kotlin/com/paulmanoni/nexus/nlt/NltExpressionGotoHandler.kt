@@ -52,16 +52,17 @@ class NltExpressionGotoHandler : GotoDeclarationHandler {
 
         // Injection-aware: when caret is inside the NexusExpr
         // injection, walk back to the host XmlAttributeValue PSI.
-        val host = ilm.getInjectionHost(sourceElement)
-        val (file, position, hostOffset) = if (host != null) {
-            val hostFile: PsiFile = host.containingFile ?: return null
-            val injectedFile = sourceElement.containingFile
-            val ho = ilm.injectedToHost(injectedFile, offset)
-            val hostElem = hostFile.findElementAt(ho) ?: host
-            Triple(hostFile, hostElem, ho)
+        // Use getTopLevelFile + injectedToHost (reliable on copies)
+        // rather than getInjectionHost (which can return null on
+        // editor copies in some IDE versions).
+        val positionFile = sourceElement.containingFile ?: return null
+        val topFile: PsiFile = ilm.getTopLevelFile(positionFile) ?: positionFile
+        val (file, position, hostOffset) = if (topFile !== positionFile) {
+            val ho = ilm.injectedToHost(positionFile, offset)
+            val hostElem = topFile.findElementAt(ho) ?: return null
+            Triple(topFile, hostElem, ho)
         } else {
-            val f = sourceElement.containingFile ?: return null
-            Triple(f, sourceElement, offset)
+            Triple(positionFile, sourceElement, offset)
         }
 
         if (!file.name.endsWith(".nlt")) return null

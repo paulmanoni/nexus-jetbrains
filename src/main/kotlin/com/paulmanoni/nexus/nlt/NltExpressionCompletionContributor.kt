@@ -79,17 +79,18 @@ private class ExpressionCompletionProvider : CompletionProvider<CompletionParame
 
         // When the caret is inside the NexusExpr injection we inject
         // into expression attribute values, parameters.position lives
-        // in the injected PSI and has no XmlAttributeValue ancestor —
-        // detectAttribute would return null. Walk back to the host
-        // PSI and translate the offset so the rest of the pipeline
-        // sees the host XmlAttributeValue normally.
-        val host = ilm.getInjectionHost(parameters.position)
-        val resolved = if (host != null) {
-            val hostFile: PsiFile = host.containingFile ?: return
-            val injectedFile = parameters.position.containingFile
-            val hostOffset = ilm.injectedToHost(injectedFile, parameters.offset)
-            val hostElem: PsiElement = hostFile.findElementAt(hostOffset) ?: host
-            Resolved(hostFile, hostElem, hostOffset)
+        // in the injected PSI's completion-copy and has no
+        // XmlAttributeValue ancestor. The earlier getInjectionHost
+        // path can return null on the copy in some IDE versions —
+        // use getTopLevelFile + injectedToHost which work
+        // unconditionally on copies.
+        val positionFile = parameters.position.containingFile
+        val topFile: PsiFile = ilm.getTopLevelFile(positionFile) ?: positionFile
+        val resolved = if (topFile !== positionFile) {
+            val hostOffset = ilm.injectedToHost(positionFile, parameters.offset)
+            val hostElem: PsiElement = topFile.findElementAt(hostOffset)
+                ?: return
+            Resolved(topFile, hostElem, hostOffset)
         } else {
             Resolved(parameters.originalFile, parameters.position, parameters.offset)
         }

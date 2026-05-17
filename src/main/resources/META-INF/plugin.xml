@@ -32,6 +32,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.7.3</b> — fix completion + navigation actually
+        firing inside the NexusExpr injection. The previous build
+        used <code>InjectedLanguageManager.getInjectionHost</code>
+        which can return null on the completion / goto file
+        copies, causing the resolver to fall through and bail on
+        the "not a .nlt file" check. Switched to
+        <code>getTopLevelFile</code> + <code>injectedToHost</code>
+        which works on copies. Net effect: typing
+        <code>@click="like(Post.|"</code> now actually pops the
+        field-completion popup it was supposed to in 0.7.2.</p>
+
         <p><b>0.7.2</b> — field completion inside call-form event
         handler args. Typing
         <code>@click="like(Post.|"</code> now offers the Post
