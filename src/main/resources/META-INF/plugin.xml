@@ -32,6 +32,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.7.4</b> — completion infrastructure rewrite to
+        actually fire inside the NexusExpr injection. The 0.7.3
+        translation path still didn't work on at least one IDE
+        build; we now look up the host .nlt file via the
+        editor's document (sidesteps every injection-copy edge
+        case) and only fall back to InjectedLanguageManager when
+        no editor is available. Plus the contributor is now
+        explicitly registered for NexusExpr language too, not
+        just <code>language="any"</code> — belt-and-suspenders
+        in case the platform's any-routing doesn't dispatch into
+        injections on every build. Logs to the "nexus.nlt.
+        completion" category so you can verify whether it
+        actually fires (Help → Show Log in Finder).</p>
+
         <p><b>0.7.3</b> — fix completion + navigation actually
         firing inside the NexusExpr injection. The previous build
         used <code>InjectedLanguageManager.getInjectionHost</code>
@@ -314,6 +328,14 @@
              editing is unaffected. -->
         <completion.contributor
             language="any"
+            implementationClass="com.paulmanoni.nexus.nlt.NltExpressionCompletionContributor"/>
+        <!-- Belt-and-suspenders: also register for NexusExpr so
+             the contributor is invoked even when the platform's
+             language="any" routing doesn't dispatch to it inside
+             an injected fragment (observed behavior on at least
+             one IDE build). -->
+        <completion.contributor
+            language="NexusExpr"
             implementationClass="com.paulmanoni.nexus.nlt.NltExpressionCompletionContributor"/>
 
         <!-- Silences bundled HTML inspections that flag legitimate

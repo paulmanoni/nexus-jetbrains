@@ -7,8 +7,9 @@ import com.intellij.codeInsight.completion.CompletionResultSet
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.completion.PlainPrefixMatcher
 import com.intellij.codeInsight.lookup.LookupElementBuilder
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.patterns.PlatformPatterns
-import com.intellij.lang.injection.InjectedLanguageManager
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.util.PlatformIcons
@@ -20,6 +21,8 @@ import com.paulmanoni.nexus.nlt.expr.componentNameFor
 import com.paulmanoni.nexus.nlt.expr.detectExpressionContext
 import com.paulmanoni.nexus.nlt.expr.resolveChainForCompletion
 import com.paulmanoni.nexus.nlt.expr.typedSuffix
+
+private val LOG = Logger.getInstance("nexus.nlt.completion")
 
 /**
  * Type-aware completion for expressions inside .nlt files.
@@ -75,29 +78,34 @@ private class ExpressionCompletionProvider : CompletionProvider<CompletionParame
         result: CompletionResultSet,
     ) {
         val project = parameters.position.project
-        val ilm = InjectedLanguageManager.getInstance(project)
 
-        // When the caret is inside the NexusExpr injection we inject
-        // into expression attribute values, parameters.position lives
-        // in the injected PSI's completion-copy and has no
-        // XmlAttributeValue ancestor. The earlier getInjectionHost
-        // path can return null on the copy in some IDE versions —
-        // use getTopLevelFile + injectedToHost which work
-        // unconditionally on copies.
-        val positionFile = parameters.position.containingFile
-        val topFile: PsiFile = ilm.getTopLevelFile(positionFile) ?: positionFile
-        val resolved = if (topFile !== positionFile) {
-            val hostOffset = ilm.injectedToHost(positionFile, parameters.offset)
-            val hostElem: PsiElement = topFile.findElementAt(hostOffset)
-                ?: return
-            Resolved(topFile, hostElem, hostOffset)
-        } else {
-            Resolved(parameters.originalFile, parameters.position, parameters.offset)
+        // Fundamental sidestep of all injection-copy headaches:
+        // go through the EDITOR to find the host .nlt file. The
+        // editor's document is the host document regardless of
+        // whether the caret sits in a NexusExpr-injected
+        // fragment. The caret offset on the editor is the offset
+        // in the host document, so PSI lookups land on the host
+        // XmlAttributeValue without any injectedToHost dance.
+        //
+        // Fallback chain: editor → original-file PSI translation
+        // via InjectedLanguageManager. Both produce a host .nlt
+        // file + a caret offset within it.
+        val resolved = resolveHost(parameters, project) ?: run {
+            LOG.warn("nl-completion: could not resolve host .nlt file (position file: ${parameters.position.containingFile.name}, original: ${parameters.originalFile.name})")
+            return
         }
+        if (!resolved.file.name.endsWith(".nlt")) {
+            LOG.warn("nl-completion: resolved file is not .nlt: ${resolved.file.name}")
+            return
+        }
+        LOG.warn("nl-completion: firing on ${resolved.file.name} at offset ${resolved.offset}")
 
-        if (!resolved.file.name.endsWith(".nlt")) return
-
-        val ctx = detectExpressionContext(resolved.position, resolved.offset) ?: return
+        val ctx = detectExpressionContext(resolved.position, resolved.offset)
+        if (ctx == null) {
+            LOG.warn("nl-completion: detectExpressionContext returned null")
+            return
+        }
+        LOG.warn("nl-completion: ctx kind=${ctx.kind} text='${ctx.text}' caretInText=${ctx.caretInText}")
 
         val scanner = GoScanner(project)
         val scope = Scope.build(resolved.position, scanner)
@@ -168,6 +176,46 @@ private data class Resolved(
     val position: PsiElement,
     val offset: Int,
 )
+
+/**
+ * resolveHost finds the host .nlt PsiFile + the caret offset
+ * within it, regardless of whether the caret is in plain HTML
+ * (text interpolation, plain attribute) or inside a NexusExpr
+ * injection. Prefers the editor route since it sidesteps every
+ * injection-copy edge case; falls back through the original
+ * file when no editor is available (programmatic completion).
+ */
+private fun resolveHost(
+    parameters: CompletionParameters,
+    project: com.intellij.openapi.project.Project,
+): Resolved? {
+    // Editor route: the editor's document IS the host (.nlt)
+    // document. The editor's caret offset is the host offset.
+    val editor = parameters.editor
+    if (editor != null) {
+        val doc = editor.document
+        val pm = PsiDocumentManager.getInstance(project)
+        val hostFile = pm.getPsiFile(doc)
+        if (hostFile != null && hostFile.name.endsWith(".nlt")) {
+            val off = editor.caretModel.offset
+            val elem = hostFile.findElementAt(off)
+                ?: hostFile.findElementAt((off - 1).coerceAtLeast(0))
+                ?: return Resolved(hostFile, hostFile, off)
+            return Resolved(hostFile, elem, off)
+        }
+    }
+    // Fallback: walk via originalFile + InjectedLanguageManager.
+    val originalFile = parameters.originalFile
+    if (originalFile.name.endsWith(".nlt")) {
+        return Resolved(originalFile, parameters.position, parameters.offset)
+    }
+    val ilm = com.intellij.lang.injection.InjectedLanguageManager.getInstance(project)
+    val top = ilm.getTopLevelFile(originalFile) ?: return null
+    if (!top.name.endsWith(".nlt")) return null
+    val hostOff = ilm.injectedToHost(originalFile, parameters.offset)
+    val elem = top.findElementAt(hostOff) ?: return null
+    return Resolved(top, elem, hostOff)
+}
 
 /**
  * isEventHandlerSignature filters methods to keep only the ones
