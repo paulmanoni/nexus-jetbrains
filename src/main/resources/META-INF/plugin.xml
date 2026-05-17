@@ -32,6 +32,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.7.2</b> — field completion inside call-form event
+        handler args. Typing
+        <code>@click="like(Post.|"</code> now offers the Post
+        struct's fields (ID / Title / Author / Likes) instead of
+        the component's handler names. ExpressionContext slices
+        the comma-separated arg containing the caret out of the
+        call expression and reports it as an attribute-value
+        context, so the existing scope-based chain resolver picks
+        up the same way it does for <code>:foo="Post.|"</code>.
+        Top-level commas / nested parens / string literals are
+        honored when slicing.</p>
+
         <p><b>0.7.1</b> — call-form event handlers
         (<code>@click="like(Post.ID)"</code>) now get the same
         NexusExpr syntax highlighting as the other expression

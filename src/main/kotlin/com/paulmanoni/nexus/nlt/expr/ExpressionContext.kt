@@ -68,13 +68,31 @@ private fun detectAttribute(element: PsiElement, caretOffset: Int): ExpressionCo
     val caretInUnquoted = caretOffset - unquotedStart
     if (caretInUnquoted < 0 || caretInUnquoted > unquoted.length) return null
 
-    // Event handlers: value is a bare Go method name. Modifiers
-    // (.prevent, .stop, .once) attach to the attribute NAME, not
-    // the value, so the value is always just the handler ident.
-    // Strip a leading dot-modifier off the value for the typed
-    // text we report (rare — usually the value is just the
-    // handler name with no extras).
+    // Event handlers split by caret position. The value is
+    // either a bare handler ident ("like") or a call expression
+    // ("like(Post.ID, msg)"). When the caret is inside the
+    // call's parens, the caret is on an arg EXPRESSION, not on
+    // the handler name — and the user wants field completion
+    // against scope, not handler-method completion. We slice out
+    // the single arg under the caret and report it as an
+    // AttributeValue context so the existing chain-resolver
+    // fires correctly. When the caret is on the handler ident
+    // (or there's no call form), the EventHandler context still
+    // surfaces method-name completion.
     if (attrName.startsWith("@") || attrName.startsWith("nl-on:")) {
+        val argSlice = callArgAtCaret(unquoted, caretInUnquoted)
+        if (argSlice != null) {
+            return ExpressionContext(
+                kind = ExpressionContext.Kind.AttributeValue,
+                text = argSlice.text,
+                caretInText = argSlice.caretInText,
+                // textStartOffset isn't load-bearing for the
+                // completion + nav paths today (both override
+                // the prefix matcher), but keep it pointed at
+                // the unquoted start as a safe approximation.
+                textStartOffset = unquotedStart + argSlice.startInUnquoted,
+            )
+        }
         return ExpressionContext(
             kind = ExpressionContext.Kind.EventHandler,
             text = unquoted,
@@ -108,6 +126,100 @@ private fun detectAttribute(element: PsiElement, caretOffset: Int): ExpressionCo
         text = unquoted,
         caretInText = caretInUnquoted,
         textStartOffset = unquotedStart,
+    )
+}
+
+/**
+ * CallArgSlice is the result of carving the single comma-
+ * separated arg containing the caret out of a call-form
+ * handler value. text/caretInText are what the expression
+ * resolvers want; startInUnquoted is the arg's first char
+ * offset within the unquoted attribute value, used to
+ * recompute absolute document positions.
+ */
+private data class CallArgSlice(
+    val text: String,
+    val caretInText: Int,
+    val startInUnquoted: Int,
+)
+
+/**
+ * callArgAtCaret returns the arg slice when the value is a
+ * call form like "name(a, b, c)" AND the caret sits inside the
+ * parens (between '(' and the matching ')'). Returns null in
+ * every other case — bare handler ident, caret on the handler
+ * name, malformed input, caret past the close paren — so the
+ * caller falls back to the EventHandler-kind context.
+ *
+ * Top-level commas separate args; nested parens / brackets /
+ * braces / string literals are honored. Backslash escapes
+ * inside strings are skipped.
+ */
+private fun callArgAtCaret(value: String, caret: Int): CallArgSlice? {
+    val open = value.indexOf('(')
+    if (open < 0 || caret <= open) return null
+
+    var depth = 1
+    var inStr: Char = 0.toChar()
+    var argStart = open + 1
+    var argEnd = value.length
+    var foundEnd = false
+    val safeCaret = caret.coerceAtMost(value.length)
+    var i = open + 1
+    while (i < value.length) {
+        val c = value[i]
+        if (inStr != 0.toChar()) {
+            if (c == '\\' && i + 1 < value.length) {
+                i += 2
+                continue
+            }
+            if (c == inStr) inStr = 0.toChar()
+            i++
+            continue
+        }
+        when (c) {
+            '"', '\'', '`' -> inStr = c
+            '(', '[', '{' -> depth++
+            ')', ']', '}' -> {
+                if (depth == 1 && c == ')') {
+                    if (i >= safeCaret) {
+                        argEnd = i
+                        foundEnd = true
+                        break
+                    }
+                    // Caret is past the matching close paren —
+                    // treat as bare handler context.
+                    return null
+                }
+                depth--
+            }
+            ',' -> {
+                if (depth == 1) {
+                    if (i >= safeCaret) {
+                        argEnd = i
+                        foundEnd = true
+                        break
+                    }
+                    argStart = i + 1
+                }
+            }
+        }
+        i++
+    }
+    if (!foundEnd) {
+        // Unterminated parens (user mid-typing). Treat the rest
+        // of the string as the current arg.
+        argEnd = value.length
+    }
+
+    val raw = value.substring(argStart, argEnd)
+    val leading = raw.takeWhile { it.isWhitespace() }.length
+    val trimmed = raw.substring(leading)
+    val caretInTrimmed = (safeCaret - argStart - leading).coerceIn(0, trimmed.length)
+    return CallArgSlice(
+        text = trimmed,
+        caretInText = caretInTrimmed,
+        startInUnquoted = argStart + leading,
     )
 }
 
