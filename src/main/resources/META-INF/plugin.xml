@@ -32,6 +32,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.7.0</b> — quick-doc panels for <code>nl-*</code>,
+        <code>:</code>, <code>@</code>, <code>#</code> attributes in
+        .nlt files. Hover (or Ctrl+Q) shows what the directive does,
+        when to use it, and an inline example. Covers every directive
+        currently recognized by the engine — structural
+        (<code>nl-if</code>, <code>nl-for</code>, etc.), client
+        (<code>nl-hook</code>, <code>nl-stream</code>,
+        <code>nl-navigate</code>), prefix shorthand (<code>:foo</code>,
+        <code>@click</code>, <code>#slot</code>), and the
+        modifier-bearing event forms.</p>
+
         <p><b>0.6.2</b> — Cmd+B on an <code>@event</code> handler
         now skips empty stub methods when a real implementation
         exists elsewhere. So in <code>PostRow.nlt</code>'s
@@ -286,6 +297,13 @@
              by description text on .nlt files only. -->
         <daemon.highlightInfoFilter
             implementation="com.paulmanoni.nexus.nlt.NltHighlightInfoFilter"/>
+
+        <!-- Quick-doc panels (Ctrl+Q / hover) on nl-*, :, @, # attrs
+             in .nlt files. Returns null for plain HTML so the platform's
+             built-in attribute docs still surface there. -->
+        <lang.documentationProvider
+            language="HTML"
+            implementationClass="com.paulmanoni.nexus.nlt.NltDirectiveDocumentationProvider"/>
 
         <!-- NexusExpr is a tiny embedded language we inject into
              expression-bearing attribute values (nl-for, nl-if,
