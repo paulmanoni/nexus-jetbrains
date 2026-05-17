@@ -32,6 +32,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.63.0</b> — version-bumped to track the framework's
+        v0.63.0 release one-to-one. Rolls up the full 0.4 → 0.7
+        line of <code>.nlt</code> editor improvements: type-aware
+        expression completion, Cmd+B navigation (template tag →
+        <code>.nlt</code> file; expression ident → Go field /
+        method), NexusExpr syntax highlighting inside expression
+        attribute values, quick-doc panels on every
+        <code>nl-*</code> / <code>:</code> / <code>@</code> /
+        <code>#</code> directive, field completion inside
+        call-form handler args (<code>@click="like(Post.|)"</code>),
+        plus the editor-based host resolver that finally fires
+        completion reliably inside the NexusExpr injection on
+        every IDE build.</p>
+
         <p><b>0.7.4</b> — completion infrastructure rewrite to
         actually fire inside the NexusExpr injection. The 0.7.3
         translation path still didn't work on at least one IDE
