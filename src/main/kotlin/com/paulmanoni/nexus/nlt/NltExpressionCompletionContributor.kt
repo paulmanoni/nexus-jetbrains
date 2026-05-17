@@ -111,7 +111,7 @@ private class ExpressionCompletionProvider : CompletionProvider<CompletionParame
             val struct = scanner.structFor(componentName) ?: return
             val r = result.withPrefixMatcher(PlainPrefixMatcher(ctx.typed))
             for (m in scanner.methodsOf(struct.name)) {
-                if (!isEventHandlerSignature(m.params)) continue
+                if (!isEventHandlerSignature(m.name, m.params)) continue
                 r.addElement(
                     LookupElementBuilder.create(m.name)
                         .withTypeText("handler")
@@ -169,10 +169,19 @@ private data class Resolved(
 )
 
 /**
- * Event handler methods take template.Payload (with or without
- * Ctx); lifecycle methods (Mount, Refresh, Unmount) take only
- * Ctx. Substring check is sufficient because parameter types
- * appear verbatim in the captured signature text.
+ * isEventHandlerSignature filters methods to keep only the ones
+ * that could be invoked by an @event="<name>" template binding.
+ * Heuristic: anything except the framework's named lifecycle
+ * hooks (Mount / Refresh / Unmount). Both handler shapes pass:
+ *   - (ctx *Ctx, p Payload)        legacy
+ *   - (ctx *Ctx, id int, body str) typed (call-form
+ *                                   @click="like(Post.ID, msg)")
+ *
+ * The prior Payload-substring check failed for the typed form;
+ * relying on name lifecycle filtering is more permissive and
+ * matches the engine's actual dispatch.
  */
-private fun isEventHandlerSignature(params: String): Boolean =
-    params.contains("Payload")
+private val LIFECYCLE_METHOD_NAMES = setOf("Mount", "Refresh", "Unmount")
+
+private fun isEventHandlerSignature(name: String, @Suppress("UNUSED_PARAMETER") params: String): Boolean =
+    !LIFECYCLE_METHOD_NAMES.contains(name)

@@ -65,7 +65,13 @@ private fun isExpressionAttribute(name: String): Boolean = when {
     name == "nl-show" || name == "nl-model" || name == "nl-html" || name == "nl-text" -> true
     // Bind attributes — short and long form.
     name.startsWith(":") || name.startsWith("nl-bind:") -> true
-    // Handlers and slot names are NOT expressions (handler names
-    // and slot names respectively), so skip them.
+    // Event handlers. The value is now either a bare handler
+    // ident (@click="like") or a call expression
+    // (@click="like(Post.ID, msg)") — both benefit from being
+    // lexed as code. For the bare-ident form the lexer paints
+    // it as one IDENT, which still beats a plain string.
+    name.startsWith("@") || name.startsWith("nl-on:") -> true
+    // Slot names stay plain strings — they're routing keys,
+    // not expressions.
     else -> false
 }

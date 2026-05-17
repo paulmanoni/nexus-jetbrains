@@ -32,6 +32,19 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.7.1</b> — call-form event handlers
+        (<code>@click="like(Post.ID)"</code>) now get the same
+        NexusExpr syntax highlighting as the other expression
+        attributes — keywords, idents, operators, parens, dots
+        all paint distinctly instead of the value reading as one
+        opaque string. Cmd+B on the handler name still resolves
+        to the Go method even when the value is a call
+        expression (strips the args before lookup). Method-name
+        matching also stopped requiring <code>Payload</code> in
+        the Go signature so the new typed form
+        <code>func (c *T) Like(ctx *Ctx, id int)</code>
+        surfaces in completion and navigation.</p>
+
         <p><b>0.7.0</b> — quick-doc panels for <code>nl-*</code>,
         <code>:</code>, <code>@</code>, <code>#</code> attributes in
         .nlt files. Hover (or Ctrl+Q) shows what the directive does,

@@ -79,7 +79,12 @@ class NltExpressionGotoHandler : GotoDeclarationHandler {
         // event-handler signature. Local component first so direct
         // handlers resolve without an unnecessary picker.
         if (ctx.kind == ExpressionContext.Kind.EventHandler) {
-            val methodName = ctx.text.trim()
+            // The value may be a bare ident ("like") or a call
+            // expression ("like(Post.ID, msg)"); we want to land
+            // on the handler method either way. Strip everything
+            // from the first '(' onward, then trim.
+            val raw = ctx.text.trim()
+            val methodName = raw.substringBefore('(').trim()
             if (methodName.isEmpty()) return null
             val pm = PsiManager.getInstance(project)
             val localName = componentNameFor(file, scanner)
@@ -141,13 +146,24 @@ class NltExpressionGotoHandler : GotoDeclarationHandler {
 /**
  * matchesHandler returns true if a Go method is a viable event-
  * handler navigation target: name matches (case-insensitive
- * because templates often use lowercase like "like" for
- * Go's "Like"), and signature contains template.Payload to
- * distinguish event handlers from lifecycle methods (Mount /
- * Refresh / Unmount take only *Ctx).
+ * because templates often use lowercase "like" for Go's "Like"),
+ * and the method isn't a known lifecycle hook (Mount / Refresh /
+ * Unmount) that the engine calls automatically rather than in
+ * response to an event.
+ *
+ * Both handler signatures qualify: the legacy (ctx *Ctx, p Payload)
+ * form and the typed (ctx *Ctx, id int, body string) form from the
+ * call-style @click="like(Post.ID)" syntax. The Payload-only
+ * filter the prior version used would have hidden the typed form
+ * from Cmd+B.
  */
-private fun matchesHandler(m: GoScanner.GoMethod, methodName: String): Boolean =
-    m.name.equals(methodName, ignoreCase = true) && m.params.contains("Payload")
+private val LIFECYCLE_METHODS = setOf("Mount", "Refresh", "Unmount")
+
+private fun matchesHandler(m: GoScanner.GoMethod, methodName: String): Boolean {
+    if (!m.name.equals(methodName, ignoreCase = true)) return false
+    if (LIFECYCLE_METHODS.contains(m.name)) return false
+    return true
+}
 
 /**
  * chainAtCaret extracts the dotted-identifier chain that contains
