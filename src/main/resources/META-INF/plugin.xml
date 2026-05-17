@@ -23,12 +23,128 @@
             <li><b>Tool window</b> showing the running app's registered plugins +
                 endpoints, fetched from <code>/__nexus/plugins</code> +
                 <code>/__nexus/endpoints</code>.</li>
+            <li><b>Live template (.nlt) support</b> — HTML editor for nexus SFCs
+                plus autocomplete for <code>nl-*</code> directives, shorthand
+                <code>:</code>/<code>@</code>/<code>#</code>, and common event names.</li>
         </ul>
         <p>Requires the <code>nexus</code> CLI binary on PATH (or configured via
         Settings → Tools → Nexus). Built against the framework's v0.43.x line.</p>
     ]]></description>
 
     <change-notes><![CDATA[
+        <p><b>0.6.2</b> — Cmd+B on an <code>@event</code> handler
+        now skips empty stub methods when a real implementation
+        exists elsewhere. So in <code>PostRow.nlt</code>'s
+        <code>@click="like"</code>, Cmd+B lands directly on
+        <code>PostsList.Like</code> (the bubbled parent handler
+        with a real body) instead of opening a picker that
+        includes the empty <code>PostRow.Like</code> stub.</p>
+
+        <p><b>0.6.1</b> — Cmd+B on an <code>@event</code> handler
+        name now also finds the method on any parent component
+        that hosts this one. Events bubble — the local
+        component's same-named method is often an empty stub
+        while the real handler lives on the parent. Local
+        component is still searched first; remote components add
+        candidates IntelliJ presents in a picker when there are
+        multiple matches.</p>
+
+        <p><b>0.6.0</b> — three .nlt editor improvements:</p>
+        <ul>
+          <li><b>Type-aware completion now fires inside attribute
+              values again</b>. v0.5.0's NexusExpr injection
+              moved the caret PSI out of the host
+              <code>XmlAttributeValue</code> subtree, breaking
+              field completion on <code>:data-id="Post.|"</code>
+              and similar. The completion contributor now resolves
+              back through <code>InjectedLanguageManager</code>
+              to the host PSI before computing scope.</li>
+          <li><b>Handler-name completion</b> on
+              <code>@click="|"</code> and
+              <code>nl-on:event="|"</code> offers the methods on
+              the local component struct whose signature looks like
+              an event handler (takes <code>template.Payload</code>) —
+              filters out lifecycle methods like <code>Mount</code>
+              and <code>Refresh</code>.</li>
+          <li><b>Cmd+B from template to Go source</b>. Cursor on a
+              bare ident (<code>Posts</code>), a chained ident
+              (<code>Post.ID</code>), or an event handler name
+              (<code>like</code>) jumps to the field or method
+              declaration in the matching Go file. Backed by an
+              extended <code>GoScanner</code> that now captures
+              per-field and per-method file offsets.</li>
+        </ul>
+
+        <p><b>0.5.0</b> — <b>code-style highlighting inside attribute
+        expressions</b>. The value of <code>nl-for</code>,
+        <code>nl-if</code>, <code>nl-model</code>, <code>:foo</code>,
+        etc. is now lexed as a small "NexusExpr" language: keywords
+        (<code>true</code>/<code>false</code>/<code>nil</code>/<code>in</code>/<code>len</code>),
+        identifiers, numbers, strings, operators, and dots get
+        their own colours matching the platform's default scheme.
+        Same approach Vue uses for JS expressions in attribute
+        values, scaled to our smaller surface.</p>
+
+        <p><b>0.4.2</b> — finishes the warning-suppression story.
+        Adds a daemon HighlightInfoFilter that catches the "Empty
+        tag doesn't work in some browsers" warning (emitted by an
+        Annotator, not an Inspection, so it escapes the v0.4.1
+        suppressor). Same scope rules: .nlt files only.</p>
+
+        <p><b>0.4.1</b> — three .nlt polish fixes:</p>
+        <ul>
+          <li>Cmd+B on <code>&lt;PostRow /&gt;</code> now finds
+              <code>post_row.nlt</code> (snake_case),
+              <code>postRow.nlt</code> (camelCase), and
+              <code>post-row.nlt</code> (kebab-case), not just
+              <code>PostRow.nlt</code>.</li>
+          <li>Suppresses HTML inspections that flag legitimate SFC
+              constructs in .nlt files: "Unknown HTML tag" on
+              PascalCase component refs, "Empty tag doesn't work
+              in some browsers" on self-closed components, and
+              "Attribute scoped is not allowed here" on
+              <code>&lt;style scoped&gt;</code>.</li>
+          <li>Expression scope now actually consults the Go
+              registration index when picking a component name —
+              <code>posts.nlt</code> resolves to <code>Posts</code>
+              only when <code>Posts</code> is truly registered,
+              instead of guessing blindly.</li>
+        </ul>
+
+        <p><b>0.4.0</b> — <b>type-aware expression completion</b>. Typing
+        <code>{{ post.| }}</code> or <code>:data-id="post.|"</code> in a
+        .nlt file now offers the actual exported fields of the bound Go
+        struct, walking dotted chains like <code>post.Author.Name</code>
+        through field types as you go. Loop variables from
+        <code>nl-for="x in Xs"</code> resolve to the element type of
+        <code>Xs</code> and become first-class scope names.</p>
+
+        <p>Implementation regex-scans project Go files for
+        <code>engine.Register(…)</code> /
+        <code>template.RegisterComponent(…)</code> registrations and
+        <code>type T struct {…}</code> declarations — no Go plugin
+        dependency, no build-classpath churn, degrades silently when a
+        type can't be resolved.</p>
+
+        <p><b>0.3.0</b> — <code>.nlt</code> polish. Three fixes/additions:
+        autocomplete now matches multi-character prefixes (<code>nl-</code>,
+        <code>@click</code>, <code>:src</code>) using a literal
+        PlainPrefixMatcher; framework attributes are whitelisted with
+        the HTML inspector so <code>@submit.prevent</code> /
+        <code>nl-model</code> no longer flash "not allowed here"
+        warnings; and Cmd+B / Cmd+Click on a <code>&lt;PascalCase /&gt;</code>
+        component tag jumps to the matching <code>{TagName}.nlt</code>
+        file in the project.</p>
+
+        <p><b>0.2.0</b> — <code>.nlt</code> (nexus live template SFC)
+        support. Files with the <code>.nlt</code> extension open in
+        the HTML editor (highlighting, attribute completion, structure
+        view, brace matching) and a new completion contributor adds
+        framework directives — <code>nl-if</code>, <code>nl-for</code>,
+        <code>nl-model</code>, <code>nl-bind:</code>, <code>nl-on:</code>,
+        shorthand <code>:</code>/<code>@</code>/<code>#</code>, and the
+        common DOM event names the runtime delegates.</p>
+
         <p><b>0.1.0</b> — initial release. YAML linting via the
         <code>nexus lint --yaml --json</code> CLI, two run configurations,
         and a tool window for the running app's plugins/endpoints.</p>
@@ -93,6 +209,106 @@
             implementation="com.paulmanoni.nexus.run.NexusDevConfigurationType"/>
         <configurationType
             implementation="com.paulmanoni.nexus.run.NexusLintConfigurationType"/>
+
+        <!-- Map .nlt (nexus live template SFC) files to the bundled
+             HTML file type so the editor gets syntax highlighting,
+             attribute-name/-value completion, structure view, brace
+             matching, and the rest of the HTML editing experience
+             without us shipping a custom parser. The NltCompletion
+             Contributor below layers framework-specific suggestions
+             (nl-*, :, @, #) on top. -->
+        <fileType name="HTML" extensions="nlt"/>
+
+        <!-- Autocomplete for nl-* directives, shorthand prefixes,
+             and common event names inside .nlt files. Filters by
+             file extension internally so it doesn't pollute regular
+             HTML editing. -->
+        <completion.contributor
+            language="HTML"
+            implementationClass="com.paulmanoni.nexus.nlt.NltCompletionContributor"/>
+
+        <!-- Whitelists nl-*, :, @, # attributes in .nlt files so the
+             HTML inspector stops flagging them as "not allowed here".
+             Validation suppression only — the completion contributor
+             above still drives what's offered on Ctrl+Space. -->
+        <xml.attributeDescriptorsProvider
+            implementation="com.paulmanoni.nexus.nlt.NltAttributeDescriptorsProvider"/>
+
+        <!-- Cmd+B / Cmd+Click on a <PascalCase /> component tag in a
+             .nlt file jumps to the file named after that component. -->
+        <gotoDeclarationHandler
+            implementation="com.paulmanoni.nexus.nlt.NltComponentGotoHandler"/>
+
+        <!-- Cmd+B / Cmd+Click on an identifier inside a .nlt
+             expression jumps to the Go declaration: bare ident →
+             struct field on the component; chained ident → terminal
+             field on the resolved chain; @event handler name →
+             method on the component struct. Works in both the host
+             HTML PSI (text interpolations, attribute values that
+             aren't NexusExpr-injected) and the injected NexusExpr
+             fragments via injection-aware host lookup. -->
+        <gotoDeclarationHandler
+            implementation="com.paulmanoni.nexus.nlt.NltExpressionGotoHandler"/>
+
+        <!-- Type-aware expression completion: {{ post.| }} and the
+             dotted bindings inside :foo / nl-if / nl-for-iter etc.
+             Scans Go source for the component's struct + chains
+             through field types, so post.Author.Name resolves to
+             User.Name without any IDE plumbing on the user's part.
+             Falls back silently when the component / struct / type
+             can't be resolved.
+
+             language="any" is intentional: the NexusExpr language we
+             inject into expression attribute values is a separate
+             registered language, so an HTML-only contributor wouldn't
+             fire when the caret sits inside the injected fragment of
+             :data-id="Post.|". The contributor filters by .nlt file
+             extension internally, so regular HTML / Kotlin / etc.
+             editing is unaffected. -->
+        <completion.contributor
+            language="any"
+            implementationClass="com.paulmanoni.nexus.nlt.NltExpressionCompletionContributor"/>
+
+        <!-- Silences bundled HTML inspections that flag legitimate
+             SFC constructs in .nlt files: PascalCase component tags
+             (<PostRow />), self-closed empty tags, and the <style
+             scoped> attribute that Vue still uses. Scope-limited
+             to .nlt; regular HTML files are unaffected. -->
+        <lang.inspectionSuppressor
+            language="HTML"
+            implementationClass="com.paulmanoni.nexus.nlt.NltInspectionSuppressor"/>
+
+        <!-- Belt-and-suspenders companion to the InspectionSuppressor
+             above. Catches HTML warnings produced by Annotators (not
+             Inspections) — most notably the "Empty tag doesn't work
+             in some browsers" emission, which doesn't carry an
+             inspection tool ID the suppressor can match on. Filters
+             by description text on .nlt files only. -->
+        <daemon.highlightInfoFilter
+            implementation="com.paulmanoni.nexus.nlt.NltHighlightInfoFilter"/>
+
+        <!-- NexusExpr is a tiny embedded language we inject into
+             expression-bearing attribute values (nl-for, nl-if,
+             :foo, nl-model, …). Its lexer classifies Go-flavored
+             tokens (keywords / idents / numbers / strings / ops /
+             dots / brackets); the syntax highlighter maps them to
+             the platform's default code colors. Effect: typing
+             `p in Posts` inside an attribute value highlights `in`
+             as a keyword and `Posts` as an identifier, exactly as
+             code does in the rest of the editor. -->
+        <fileType
+            name="NexusExpr"
+            implementationClass="com.paulmanoni.nexus.nlt.lang.NexusExprFileType"
+            fieldName="INSTANCE"
+            language="NexusExpr"/>
+        <lang.parserDefinition
+            language="NexusExpr"
+            implementationClass="com.paulmanoni.nexus.nlt.lang.NexusExprParserDefinition"/>
+        <lang.syntaxHighlighterFactory
+            language="NexusExpr"
+            implementationClass="com.paulmanoni.nexus.nlt.lang.NexusExprSyntaxHighlighterFactory"/>
+        <multiHostInjector
+            implementation="com.paulmanoni.nexus.nlt.lang.NexusExprInjector"/>
     </extensions>
 
     <!-- JSON Schema mapping for nexus.deploy.yaml — drives
